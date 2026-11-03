@@ -18,9 +18,11 @@ app.disable('x-powered-by');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
-  .split(',')
-  .map((origin) => origin.trim());
+// const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+//   .split(',')
+//   .map((origin) => origin.trim());
+
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim()) : ['http://localhost:5173'];
 
 app.use((req, res, next) => {
   const origin = req.get('origin');
