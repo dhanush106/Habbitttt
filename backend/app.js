@@ -1,5 +1,6 @@
 import express from 'express';
 import 'dotenv/config';
+import mongoose from 'mongoose';
 import connectDB from './db/index.js';
 import authRoutes from './routes/auth.js';
 import fitnessRoutes from './routes/fitness.js';
@@ -13,6 +14,7 @@ import { configureEnvironment } from './utils/environment.js';
 configureEnvironment();
 
 const app = express();
+let connectionPromise;
 
 app.disable('x-powered-by');
 app.use(express.json());
@@ -42,6 +44,26 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+if (process.env.VERCEL === '1') {
+  app.use('/api', async (req, res, next) => {
+    if (mongoose.connection.readyState === 1) return next();
+    if (!connectionPromise) {
+      connectionPromise = connectDB().catch((error) => {
+        connectionPromise = undefined;
+        throw error;
+      });
+    }
+
+    try {
+      await connectionPromise;
+      next();
+    } catch (error) {
+      console.error('Unable to connect to MongoDB for this request:', error.message);
+      res.status(503).json({ message: 'The database is temporarily unavailable.' });
+    }
+  });
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });

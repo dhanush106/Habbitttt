@@ -13,7 +13,7 @@ Express and MongoDB API for user accounts, daily habit tracking, and weekly goal
 
 ## Deploy to Vercel
 
-Create a Vercel project for this repository with `backend` as its Root Directory and the Framework Preset set to **Other**. Vercel serves the API through `api/[...path].js`; configure production `MONGODB_URI`, `JWT_SECRET`, and `CORS_ORIGIN` environment variables before deploying. The backend requires `CORS_ORIGIN` to exactly match the frontend origin. Verify the deployment at `/api/health`.
+Create a Vercel project for this repository with `backend` as its Root Directory and the Framework Preset set to **Express**. Vercel routes requests to the Express app, including nested API paths such as `/api/auth/login`. Configure production `MONGODB_URI`, `JWT_SECRET`, and `CORS_ORIGIN` environment variables before deploying. The backend requires `CORS_ORIGIN` to exactly match the frontend origin. Verify the deployment at `/api/health`.
 
 See the repository [README](../README.md) for the complete two-project Vercel setup.
 

@@ -31,7 +31,7 @@ Create two Vercel projects from this repository, both connected to the `main` br
 ### Backend project
 
 - Set **Root Directory** to `backend`.
-- Set **Framework Preset** to **Other**. The API catch-all function is in `backend/api/`.
+- Set **Framework Preset** to **Express** so Vercel routes all API paths, including nested routes such as `/api/auth/login`, to the Express app.
 - Configure these production environment variables:
   - `MONGODB_URI`: your production MongoDB connection string.
   - `JWT_SECRET`: a unique random secret of at least 32 characters.
