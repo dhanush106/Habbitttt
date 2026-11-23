@@ -5,17 +5,49 @@ import { isDateKey, isValidRange } from '../utils/dates.js';
 const priorities = ['Low', 'Medium', 'High'];
 const statuses = ['pending', 'in_progress', 'completed'];
 
-export const summarizeTodo = (tasks, goals, focusDate) => {
+const shiftDateKey = (dateKey, amount) => {
+  const date = new Date(`${dateKey}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+};
+
+const startOfWeek = (dateKey) => {
+  const date = new Date(`${dateKey}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
+};
+
+export const summarizeTodo = (tasks, goals, focusDate, { weekTasks = tasks, streakTasks = tasks, today = new Date().toISOString().slice(0, 10) } = {}) => {
   const focusTasks = tasks.filter((task) => task.date === focusDate);
   const completed = focusTasks.filter((task) => task.status === 'completed').length;
   const focusMinutes = focusTasks.reduce((total, task) => total + task.durationMinutes, 0);
   const categoryTotals = new Map();
   const activityTotals = new Map();
+  const productiveDates = new Set();
 
   for (const task of tasks) {
     categoryTotals.set(task.category, (categoryTotals.get(task.category) ?? 0) + task.durationMinutes);
-    activityTotals.set(task.date, (activityTotals.get(task.date) ?? 0) + 1);
+    const activity = activityTotals.get(task.date) ?? { date: task.date, tasks: 0, completed: 0, pending: 0 };
+    activity.tasks += 1;
+    if (task.status === 'completed') {
+      activity.completed += 1;
+      productiveDates.add(task.date);
+    } else {
+      activity.pending += 1;
+    }
+    activityTotals.set(task.date, activity);
   }
+
+  const completedWeekTasks = weekTasks.filter((task) => task.status === 'completed').length;
+  const streakDates = new Set(streakTasks.filter((task) => task.status === 'completed').map((task) => task.date));
+  let streakCursor = streakDates.has(today) ? today : shiftDateKey(today, -1);
+  let currentStreak = 0;
+  while (streakDates.has(streakCursor)) {
+    currentStreak += 1;
+    streakCursor = shiftDateKey(streakCursor, -1);
+  }
+  const [year, month] = focusDate.split('-').map(Number);
+  const goalDays = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
   return {
     summary: {
@@ -28,13 +60,25 @@ export const summarizeTodo = (tasks, goals, focusDate) => {
       productivityPercent: focusTasks.length ? Math.round((completed / focusTasks.length) * 100) : 0,
       categoryCount: new Set(focusTasks.map((task) => task.category)).size,
     },
+    metrics: {
+      currentStreak,
+      weekly: {
+        totalTasks: weekTasks.length,
+        completedTasks: completedWeekTasks,
+        percentage: weekTasks.length ? Math.round((completedWeekTasks / weekTasks.length) * 100) : 0,
+      },
+      monthly: {
+        productiveDays: productiveDates.size,
+        goalDays,
+      },
+    },
     categories: [...categoryTotals].map(([category, minutes]) => ({
       category,
       minutes,
       hours: Math.round((minutes / 60) * 10) / 10,
       percentage: focusMinutes ? Math.round((minutes / focusMinutes) * 100) : 0,
     })).sort((left, right) => right.minutes - left.minutes),
-    activity: [...activityTotals].map(([date, tasksCount]) => ({ date, tasks: tasksCount })),
+    activity: [...activityTotals.values()],
     goals: {
       total: goals.length,
       completed: goals.filter((goal) => goal.completed).length,
@@ -48,11 +92,22 @@ export const getTodoDashboard = async (req, res) => {
   if (!isValidRange(startDate, endDate) || !isDateKey(focusDate) || focusDate < startDate || focusDate > endDate) {
     return res.status(400).json({ message: 'Provide a valid date range and a focusDate within that range.' });
   }
-  const [tasks, goals] = await Promise.all([
-    TodoTask.find({ user: req.userId, date: { $gte: startDate, $lte: endDate } }).sort({ date: 1, startTime: 1, createdAt: 1 }),
+  const today = isDateKey(req.query.today) ? req.query.today : new Date().toISOString().slice(0, 10);
+  const weekStart = startOfWeek(focusDate);
+  const weekEnd = shiftDateKey(weekStart, 6);
+  const monthTasksQuery = TodoTask.find({ user: req.userId, date: { $gte: startDate, $lte: endDate } }).sort({ date: 1, startTime: 1, createdAt: 1 });
+  const weekTasksQuery = weekStart < startDate || weekEnd > endDate
+    ? TodoTask.find({ user: req.userId, date: { $gte: weekStart, $lte: weekEnd } }).sort({ date: 1, startTime: 1, createdAt: 1 })
+    : null;
+  const streakStart = shiftDateKey(today, -365);
+  const [tasks, goals, streakTasks, queriedWeekTasks] = await Promise.all([
+    monthTasksQuery,
     TodoChecklist.find({ user: req.userId, date: focusDate }).sort({ createdAt: 1 }),
+    TodoTask.find({ user: req.userId, date: { $gte: streakStart, $lte: today }, status: 'completed' }).select('date status'),
+    weekTasksQuery,
   ]);
-  res.json({ tasks, dailyGoals: goals, focusDate, ...summarizeTodo(tasks, goals, focusDate) });
+  const weekTasks = queriedWeekTasks || tasks.filter((task) => task.date >= weekStart && task.date <= weekEnd);
+  res.json({ tasks, dailyGoals: goals, focusDate, ...summarizeTodo(tasks, goals, focusDate, { weekTasks, streakTasks, today }) });
 };
 
 export const createTask = async (req, res) => {

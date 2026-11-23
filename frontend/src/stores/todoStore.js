@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiRequest } from '../lib/api';
+import { toDateKey } from '../lib/dates';
 import { useAuthStore } from './authStore';
 
 const request = async (path, options = {}) => {
@@ -15,6 +16,7 @@ export const useTodoStore = create((set, get) => ({
   tasks: [],
   dailyGoals: [],
   summary: { totalTasks: 0, completedTasks: 0, inProgressTasks: 0, pendingTasks: 0, focusMinutes: 0, focusHours: 0, productivityPercent: 0, categoryCount: 0 },
+  metrics: { currentStreak: 0, weekly: { totalTasks: 0, completedTasks: 0, percentage: 0 }, monthly: { productiveDays: 0, goalDays: 0 } },
   categories: [],
   activity: [],
   focusDate: '',
@@ -25,7 +27,7 @@ export const useTodoStore = create((set, get) => ({
   loadDashboard: async (startDate, endDate, focusDate) => {
     set({ loading: true, error: '', startDate, endDate, focusDate });
     try {
-      const query = new URLSearchParams({ startDate, endDate, focusDate });
+      const query = new URLSearchParams({ startDate, endDate, focusDate, today: toDateKey(new Date()) });
       const data = await request(`/todo/dashboard?${query}`);
       set({ ...data, loading: false });
     } catch (error) {
