@@ -16,7 +16,7 @@ function Navbar() {
   };
 
   return (
-    <motion.header className="topbar" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+    <motion.header className="topbar" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.2, 0.7, 0.2, 1] }}>
       <Link className="brand-lockup" to={user ? '/tracker' : '/login'} aria-label="Habbittt home">
         <span className="brand-mark"><Check size={17} strokeWidth={3} /></span><span>Habbittt</span>
       </Link>
@@ -25,7 +25,7 @@ function Navbar() {
           <NavLink aria-label="Habit tracker" title="Habit tracker" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/tracker"><CheckCircle2 size={14} /><span>Habits</span></NavLink>
           <NavLink aria-label="Fitness tracker" title="Fitness tracker" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/fitness"><Activity size={14} /><span>Fitness</span></NavLink>
           <NavLink aria-label="LeetTrack" title="LeetTrack" className={({ isActive }) => `nav-link nav-leettrack${isActive ? ' active' : ''}`} to="/leettrack"><CodeXml size={15} /><span>LeetTrack</span></NavLink>
-          <NavLink aria-label="ToDo planner" title="ToDo planner" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/todo"><ListTodo size={15} /><span>ToDo</span></NavLink>
+          <NavLink aria-label="Daily Todo" title="Daily Todo" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to="/todo"><ListTodo size={15} /><span>ToDo</span></NavLink>
           <span className="nav-user">{user.name}</span>
           <button className="nav-logout" type="button" onClick={handleLogout} title="Sign out" aria-label="Sign out"><LogOut size={16} /></button>
         </> : <Link className="nav-quiet-link" to={location.pathname === '/register' ? '/login' : '/register'}>

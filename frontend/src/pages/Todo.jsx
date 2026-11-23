@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -6,27 +6,21 @@ import {
   CalendarDays,
   ChartNoAxesColumn,
   Check,
-  CheckCheck,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
   Circle,
   Clock3,
   Flame,
-  LayoutDashboard,
   ListTodo,
-  LogOut,
   Pencil,
   Plus,
   Search,
-  Settings,
   Target,
   Trash2,
   X,
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { getWeekStart, toDateKey } from '../lib/dates';
-import { useAuthStore } from '../stores/authStore';
+import { toDateKey } from '../lib/dates';
 import { useTodoStore } from '../stores/todoStore';
 import './Todo.css';
 
@@ -57,9 +51,9 @@ const formatDuration = (minutes) => {
   if (!hours) return `${remainder}m`;
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 };
-const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'H';
-
 function TodoModal({ task, date, pending, error, onClose, onSubmit }) {
+  const taskCategories = task?.category && !categories.includes(task.category) ? [task.category, ...categories] : categories;
+
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.key === 'Escape') onClose();
@@ -100,7 +94,7 @@ function TodoModal({ task, date, pending, error, onClose, onSubmit }) {
             <textarea defaultValue={task?.notes || ''} maxLength="1000" name="notes" placeholder="Add a little context" rows="3" />
           </label>
           <label className="todo-field">Category
-            <select defaultValue={task?.category || 'Study'} name="category">{categories.map((category) => <option key={category}>{category}</option>)}</select>
+            <select defaultValue={task?.category || 'Study'} name="category">{taskCategories.map((category) => <option key={category}>{category}</option>)}</select>
           </label>
           <label className="todo-field">Priority
             <select defaultValue={task?.priority || 'Medium'} name="priority">{priorities.map((priority) => <option key={priority}>{priority}</option>)}</select>
@@ -111,10 +105,11 @@ function TodoModal({ task, date, pending, error, onClose, onSubmit }) {
           <label className="todo-field">Due time
             <input defaultValue={task?.startTime || '09:00'} name="startTime" required type="time" />
           </label>
-          <label className="todo-field">Duration
-            <select defaultValue={task?.durationMinutes || 60} name="durationMinutes">
-              {[15, 30, 45, 60, 90, 120, 180].map((minutes) => <option key={minutes} value={minutes}>{formatDuration(minutes)}</option>)}
-            </select>
+          <label className="todo-field">Duration in minutes
+            <input defaultValue={task?.durationMinutes || 60} max="1440" min="1" name="durationMinutes" required type="number" />
+          </label>
+          <label className="todo-field todo-field-wide">Tags <span className="todo-optional">Comma separated</span>
+            <input defaultValue={(task?.tags || []).join(', ')} maxLength="240" name="tags" placeholder="Focus, Routine" />
           </label>
           {error && <p className="todo-inline-error" role="alert">{error}</p>}
           <div className="todo-form-actions">
@@ -137,9 +132,7 @@ function Todo() {
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState('');
   const [toast, setToast] = useState('');
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
-  const navigate = useNavigate();
+  const searchInput = useRef(null);
 
   const tasks = useTodoStore((state) => state.tasks);
   const dailyGoals = useTodoStore((state) => state.dailyGoals);
@@ -170,6 +163,7 @@ function Todo() {
       const term = search.trim().toLowerCase();
       return !term || `${task.title} ${task.notes} ${task.category} ${(task.tags || []).join(' ')}`.toLowerCase().includes(term);
     }), [categoryFilter, priorityFilter, search, selectedDate, tasks]);
+  const availableCategories = useMemo(() => [...new Set([...categories, ...tasks.map((task) => task.category).filter(Boolean)])], [tasks]);
   const totalGoals = dailyGoals.length;
   const completedGoals = dailyGoals.filter((goal) => goal.completed).length;
   const completedTasks = summary.completedTasks || 0;
@@ -190,6 +184,17 @@ function Todo() {
     const timeout = window.setTimeout(() => setToast(''), 2600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        searchInput.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const runAction = async (action, successMessage) => {
     setPending(true);
@@ -241,18 +246,22 @@ function Todo() {
       durationMinutes: Number(form.get('durationMinutes')),
       category: form.get('category'),
       priority: form.get('priority'),
-      tags: editingTask?.tags || [],
+      tags: String(form.get('tags') || '').split(',').map((tag) => tag.trim()).filter(Boolean),
     };
     const ok = await runAction(
       () => editingTask ? updateTask(editingTask._id, values) : createTask(values),
       editingTask ? 'Task updated' : 'Task created',
     );
-    if (ok) setModalOpen(false);
+    if (ok) {
+      if (editingTask && values.date !== selectedDate) setSelectedDate(values.date);
+      setModalOpen(false);
+    }
   };
 
   const quickAdd = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const title = String(form.get('title') || '').trim();
     if (!title) return;
     const ok = await runAction(() => createTask({
@@ -265,7 +274,7 @@ function Todo() {
       priority: form.get('priority'),
       tags: [],
     }), 'Task added to your day');
-    if (ok) event.currentTarget.reset();
+    if (ok) formElement.reset();
   };
 
   const toggleTask = (task) => runAction(
@@ -280,45 +289,18 @@ function Todo() {
 
   const addGoal = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const title = String(form.get('title') || '').trim();
     if (!title) return;
-    if (await runAction(() => createDailyGoal({ title, date: selectedDate }), 'Daily goal added')) event.currentTarget.reset();
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
+    if (await runAction(() => createDailyGoal({ title, date: selectedDate }), 'Daily goal added')) formElement.reset();
   };
 
   const progressLabel = productivityPercent === 100 ? 'Everything checked off' : `${pendingTasks} ${pendingTasks === 1 ? 'task' : 'tasks'} left to go`;
 
   return (
-    <div className="todo-app">
-      <aside className="todo-nav">
-        <Link className="todo-brand" to="/tracker" aria-label="Habbittt dashboard">
-          <span className="todo-brand-mark"><Check size={18} strokeWidth={3} /></span>
-          <span>Habbittt<small>YOUR DAILY SPACE</small></span>
-        </Link>
-        <p className="todo-nav-label">WORKSPACE</p>
-        <nav className="todo-nav-links" aria-label="Workspace navigation">
-          <Link className="todo-nav-link" to="/tracker"><LayoutDashboard size={17} />Dashboard</Link>
-          <Link className="todo-nav-link active" aria-current="page" to="/todo"><CheckSquare size={17} />Daily Todo</Link>
-          <Link className="todo-nav-link" to="/tracker"><CheckCheck size={17} />Habits</Link>
-          <span className="todo-nav-link unavailable" aria-disabled="true" title="Analytics is coming soon"><ChartNoAxesColumn size={17} />Analytics</span>
-          <span className="todo-nav-link unavailable" aria-disabled="true" title="Goals is coming soon"><Target size={17} />Goals</span>
-          <span className="todo-nav-link unavailable" aria-disabled="true" title="Settings is coming soon"><Settings size={17} />Settings</span>
-        </nav>
-        <div className="todo-nav-bottom">
-          <div className="todo-profile">
-            <span className="todo-profile-avatar">{initials(user?.name)}</span>
-            <span className="todo-profile-name">{user?.name || 'Your account'}<small>Personal workspace</small></span>
-            <button className="todo-quiet-icon" type="button" onClick={handleLogout} title="Sign out" aria-label="Sign out"><LogOut size={16} /></button>
-          </div>
-        </div>
-      </aside>
-
-      <main className="todo-workspace">
+    <main className="todo-page">
+      <div className="todo-workspace">
         <header className="todo-page-header">
           <div className="todo-title-block">
             <span className="todo-page-icon"><ListTodo size={18} /></span>
@@ -353,8 +335,8 @@ function Todo() {
               </header>
 
               <div className="todo-toolbar">
-                <label className="todo-search"><Search size={16} /><input aria-label="Search daily tasks" onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks..." value={search} /><kbd>⌘ K</kbd></label>
-                <label className="todo-select-wrap"><span className="sr-only">Filter by category</span><select aria-label="Filter by category" onChange={(event) => setCategoryFilter(event.target.value)} value={categoryFilter}><option>All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+                <label className="todo-search"><Search size={16} /><input ref={searchInput} aria-label="Search daily tasks" onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks..." value={search} /><kbd>⌘ K</kbd></label>
+                <label className="todo-select-wrap"><span className="sr-only">Filter by category</span><select aria-label="Filter by category" onChange={(event) => setCategoryFilter(event.target.value)} value={categoryFilter}><option>All categories</option>{availableCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
                 <label className="todo-select-wrap"><span className="sr-only">Filter by priority</span><select aria-label="Filter by priority" onChange={(event) => setPriorityFilter(event.target.value)} value={priorityFilter}><option>All priorities</option>{priorities.map((priority) => <option key={priority}>{priority}</option>)}</select></label>
               </div>
 
@@ -362,16 +344,14 @@ function Todo() {
                 <table className="todo-table">
                   <thead><tr><th className="todo-check-column"><span className="sr-only">Complete</span></th><th>Task</th><th>Category</th><th>Priority</th><th>Status</th><th className="todo-action-column">Actions</th></tr></thead>
                   <tbody>
-                    {loading && !tasks.length && <tr><td className="todo-table-message" colSpan="6"><span className="todo-spinner" /> Loading your tasks…</td></tr>}
-                    {!loading && selectedTasks.length === 0 && (
+                    {loading ? <tr><td className="todo-table-message" colSpan="6"><span className="todo-spinner" /> Loading your tasks…</td></tr> : selectedTasks.length === 0 ? (
                       <tr><td className="todo-table-message" colSpan="6">
                         <div className="todo-empty-state"><span><CalendarDays size={20} /></span><strong>{totalTasks ? 'No matching tasks' : 'A clear day starts here'}</strong><p>{totalTasks ? 'Try another search or filter.' : 'Make some space for what matters.'}</p>{!totalTasks && <button className="todo-text-button" type="button" onClick={openCreate}><Plus size={14} /> Create your first task</button>}</div>
                       </td></tr>
-                    )}
-                    {selectedTasks.map((task) => (
+                    ) : selectedTasks.map((task) => (
                       <tr className={task.status === 'completed' ? 'is-completed' : ''} key={task._id}>
                         <td className="todo-check-column"><button className={`todo-task-checkbox${task.status === 'completed' ? ' checked' : ''}`} type="button" role="checkbox" aria-checked={task.status === 'completed'} aria-label={`${task.status === 'completed' ? 'Reopen' : 'Complete'} ${task.title}`} disabled={pending} onClick={() => void toggleTask(task)}>{task.status === 'completed' && <Check size={13} />}</button></td>
-                        <td className="todo-task-name"><strong>{task.title}</strong>{task.notes && <small>{task.notes}</small>}<span className="todo-task-time"><Clock3 size={12} />{task.startTime}{task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ''}</span></td>
+                        <td className="todo-task-name"><strong>{task.title}</strong>{task.notes && <small>{task.notes}</small>}{task.tags?.length > 0 && <span className="todo-task-tags">{task.tags.slice(0, 3).map((tag) => <i key={tag}>{tag}</i>)}</span>}<span className="todo-task-time"><Clock3 size={12} />{task.startTime}{task.durationMinutes ? ` · ${formatDuration(task.durationMinutes)}` : ''}</span></td>
                         <td><span className={`todo-category-chip category-${task.category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{task.category}</span></td>
                         <td><span className={`todo-priority priority-${task.priority.toLowerCase()}`}><i />{task.priority}</span></td>
                         <td><span className={`todo-status status-${task.status === 'completed' ? 'completed' : 'pending'}`}>{task.status === 'completed' ? 'Completed' : 'Pending'}</span></td>
@@ -480,7 +460,7 @@ function Todo() {
             </section>
           </aside>
         </div>
-      </main>
+      </div>
 
       <AnimatePresence>
         {modalOpen && <TodoModal key={editingTask?._id || 'new-task'} task={editingTask} date={selectedDate} pending={pending} error={actionError} onClose={() => setModalOpen(false)} onSubmit={submitTask} />}
@@ -488,7 +468,7 @@ function Todo() {
       <AnimatePresence>
         {toast && <motion.div className="todo-toast" role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}><Check size={15} />{toast}</motion.div>}
       </AnimatePresence>
-    </div>
+    </main>
   );
 }
 

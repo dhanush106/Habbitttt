@@ -60,3 +60,17 @@ All fitness endpoints require authentication. Dashboard summaries are calculated
 - `DELETE /api/fitness/measurements/:measurementId`
 - `POST /api/fitness/goals` - activity or weight goal
 - `DELETE /api/fitness/goals/:goalId`
+
+## Daily Todo
+
+All Todo endpoints require authentication and scope records to the signed-in account. Dates use `YYYY-MM-DD`; task times use 24-hour `HH:mm`. The dashboard returns tasks and calendar activity for the requested date range, daily metrics for `focusDate`, weekly completion metrics for that date's Monday-to-Sunday week, productive days for its month, and the current consecutive-day completion streak. The optional `today` date key lets clients use their local date when calculating the streak.
+
+- `GET /api/todo/dashboard?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&focusDate=YYYY-MM-DD&today=YYYY-MM-DD`
+- `POST /api/todo/tasks` - `{ title, date, startTime, durationMinutes, notes?, category?, tags?, priority? }`
+- `PATCH /api/todo/tasks/:taskId` - update task fields, including `status` (`pending`, `in_progress`, or `completed`)
+- `DELETE /api/todo/tasks/:taskId`
+- `POST /api/todo/goals` - `{ title, date }` for a daily checklist item
+- `PATCH /api/todo/goals/:goalId` - `{ completed }`
+- `DELETE /api/todo/goals/:goalId`
+
+Priorities are `Low`, `Medium`, or `High`. Categories are user-defined strings, so existing and custom categories remain supported.
